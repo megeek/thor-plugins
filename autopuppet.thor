@@ -1,7 +1,7 @@
 require 'open3'
 require 'yaml'
 
-begin 
+begin
   require 'thor'
 rescue LoadError
   require 'rubygems'
@@ -24,7 +24,7 @@ class AutoPuppet < Thor
       say "~/.autopuppet does not exist", :yellow
 
       @@config = {"deploy" => {}, "agent" => {}}
-      @@config["deploy"]["master"] = ask "Puppet master:"
+      @@config["deploy"]["master"]  = ask "Puppet master:"
       @@config["deploy"]["command"] = ask "Command to execute:"
 
       File.open(@@configfile, "w") do |file|
@@ -36,25 +36,34 @@ class AutoPuppet < Thor
   desc "deploy", "Run puppet deployment on master"
   method_option :env, :type => :string, :aliases => "-e"
   def deploy
-    invoke "puppet:config"
+    invoke "puppet:config", []
 
-    say "Running #{@@config["deploy"]["command"]} on #{@@config["deploy"]["master"]}"
+    nodes = @@config["deploy"]["master"]
+    cmd   = @@config["deploy"]["command"]
 
-    cmd = %{ssh -T #{@@config["deploy"]["master"]} "#{@@config["deploy"]["command"]}"}
-    Open3.popen3(cmd) do |input, output, err, thr|
+    if nodes.is_a? String
+      nodes = [nodes]
+    end
 
-      while thr.alive?
-        handles = [output, err]
-        readable, writable, errable = Kernel.select(handles, [], [], 1)
+    nodes.each do |node|
 
-        readable.each do |io|
-          print io.getc unless io.eof?
-          $stdout.flush
-        end unless readable.nil?
+      full_cmd = %{ssh -T #{node} "#{cmd}"}
+      say full_cmd, :yellow
+
+      Open3.popen3(full_cmd) do |input, output, err, thr|
+
+        while thr.alive?
+          handles = [output, err]
+          readable, writable, errable = Kernel.select(handles, [], [], 1)
+
+          readable.each do |io|
+            print io.getc unless io.eof?
+            $stdout.flush
+          end unless readable.nil?
+        end
       end
     end
 
-    puts
     say "Done!", :green
   end
 
